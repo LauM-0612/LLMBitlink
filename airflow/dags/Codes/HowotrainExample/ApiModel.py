@@ -98,4 +98,4 @@ async def generate_text(request_body: RequestBody):
 
 if __name__ == "__main__":
     port = int(os.getenv("FASTAPI_PORT", 8800))
-    uvicorn.run("nombre_del_archivo:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app", host="0.0.0.0", port=port, reload=True)
