@@ -7,9 +7,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from contextlib import asynccontextmanager
 
 # Reemplaza con tu token de Hugging Face
 HUGGING_FACE_TOKEN = "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"
+
+# Modelo y tokenizer se cargarán una vez para evitar cargarlos en cada request
+model = None
+tokenizer = None
 
 app = FastAPI()
 
@@ -21,10 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Modelo y tokenizer se cargarán una vez para evitar cargarlos en cada request
-model = None
-tokenizer = None
 
 class RequestBody(BaseModel):
     prompt: str
@@ -70,13 +71,20 @@ def generate_response(model, tokenizer, prompt):
     response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     return response.strip()
 
-@app.on_event("startup")
-async def startup_event():
-    # Cargar el modelo cuando se inicia la aplicación
-    model_name = "pspedroelias96/LLMBitlink_Final"  # Usa el nombre de tu modelo fine-tuned
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Código que se ejecuta al inicio (startup)
     authenticate()
+    model_name = "pspedroelias96/LLMBitlink_Final"  # Usa el nombre de tu modelo fine-tuned
     load_model_and_tokenizer(model_name)
     print("¡Modelo cargado exitosamente!")
+    
+    yield  # Pausa para que la app siga corriendo
+
+    # Código que se ejecuta al final (shutdown)
+    print("Apagando la aplicación...")
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/generate")
 async def generate_text(request_body: RequestBody):
@@ -90,4 +98,4 @@ async def generate_text(request_body: RequestBody):
 
 if __name__ == "__main__":
     port = int(os.getenv("FASTAPI_PORT", 8800))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("nombre_del_archivo:app", host="0.0.0.0", port=port, reload=True)
