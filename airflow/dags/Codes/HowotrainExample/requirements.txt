@@ -15,4 +15,4 @@ torch
 wandb
 huggingface_hub
 fastapi
-unicorn
+uvicorn
