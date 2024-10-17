@@ -1,7 +1,6 @@
 Django>=3.0,<4.0
 djangorestframework
 gunicorn>=20.0
-psycopg2-binary>=2.8
 requests  
 fastapi
 uvicorn
@@ -12,3 +11,4 @@ torch
 pydantic
 transformers
 scikit-learn
+django-import-export

@@ -5,40 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Chat</title>
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* Estilos adicionales para el chat */
-        .chat-container {
-            max-width: 500px;
-            margin: auto;
+        /* Estilos personalizados para full pantalla */
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background-color: #007bff;
+            color: white;
+        }
+
+        .chat-logo img {
+            height: 50px;  /* Ajusta el tamaño del logo */
+        }
+
+        .chat-title {
+            flex-grow: 1;
+            text-align: center;
+            font-size: 1.5rem;
+            margin: 0;
+        }
+
         .chat-messages {
-            max-height: 300px;
+            flex-grow: 1;
             overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 1rem;
+        }
+
+        .chat-footer {
+            padding: 1rem;
+            background-color: white;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .input-group {
+            display: flex;
+            width: 100%;
+        }
+
+        .input-group input {
+            flex-grow: 1;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-right: 0.5rem;
+        }
+
+        .input-group button {
+            padding: 1rem;
+        }
+
+        /* Asegura que el contenedor crezca y se adapte */
+        .full-screen-container {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
         }
     </style>
 </head>
 <body>
-    <div class="container chat-container mt-5">
-        <div class="card">
-            <div class="card-header bg-primary text-white">Chat con Asistente Virtual</div>
-            <div class="card-body chat-messages">
-                <!-- Aquí se mostrarán los mensajes del chat -->
+    <div class="chat-container">
+        <!-- Cabecera del chat con el logo y el título -->
+        <div class="chat-header">
+            <div class="chat-logo">
+                <img src="ruta_del_logo" alt="Logo de la empresa"> <!-- Reemplaza 'ruta_del_logo' con el enlace a tu logo -->
             </div>
-            <div class="card-footer">
-                <div class="input-group">
-                    <input type="text" class="form-control" id="mensajeInput" placeholder="Escribe tu mensaje...">
-                    <button class="btn btn-primary" onclick="enviarMensaje()">Enviar</button>
-                </div>
+            <div class="chat-title">
+                Chat con Asistente Virtual
+            </div>
+        </div>
+
+        <!-- Área de mensajes del chat en pantalla completa -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- Aquí se mostrarán los mensajes del chat -->
+        </div>
+
+        <!-- Footer del chat con el input y el botón para enviar mensajes -->
+        <div class="chat-footer">
+            <div class="input-group">
+                <input type="text" class="form-control" id="mensajeInput" placeholder="Escribe tu mensaje...">
+                <button class="btn btn-primary" onclick="enviarMensaje()">Enviar</button>
             </div>
         </div>
     </div>
 
+    <!-- Coloca el JavaScript aquí, antes de cerrar el body -->
     <script>
+        // Obtener el token CSRF para Django
         function getCSRFToken() {
             return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         }
 
+        // Función para enviar el mensaje al backend Django, que lo enviará a la FastAPI
         function enviarMensaje() {
             var mensaje = document.getElementById('mensajeInput').value;
             if (mensaje.trim() !== '') {
@@ -46,7 +122,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': getCSRFToken() // Utiliza la función para obtener el CSRF token
+                        'X-CSRFToken': getCSRFToken()  // CSRF token si usas Django
                     },
                     body: JSON.stringify({mensaje: mensaje})
                 })
@@ -62,8 +138,9 @@
             }
         }
 
+        // Función para agregar mensajes al chat
         function agregarMensaje(emisor, mensaje) {
-            var chatMessages = document.querySelector('.chat-messages');
+            var chatMessages = document.getElementById('chatMessages');
             var mensajeHTML = `
                 <div class="mb-2">
                     <strong>${emisor}</strong>: ${mensaje}
