@@ -1,0 +1,35 @@
+# Usar una imagen base oficial de Python
+FROM python:3.9-slim
+
+# Establecer el directorio de trabajo en el contenedor
+WORKDIR /LLM
+
+# Instalar Git y otras dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    git \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clonar el repositorio de GitHub
+RUN git clone git clone https://github.com/LauM-0612/LLMBitlink.git /LLM
+
+# Cambiar al directorio del repositorio
+WORKDIR /LLM/airflow/dags/Codes/HowtrainExample
+
+# Copiar el archivo requirements.txt al contenedor
+COPY requirements.txt .
+
+# Instalar las dependencias de Python
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Establecer las variables de entorno para los tokens
+ENV HF_TOKEN=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
+ENV WANDB_TOKEN=3c43666920cfec502c5ab03818d3712b1ce8d1db
+
+# Exponer el puerto (opcional si tu aplicación necesita servir algún servicio web)
+EXPOSE 8800
+
+# Comando para ejecutar el script principal
+CMD ["python", "finetuning_chat.py"]
