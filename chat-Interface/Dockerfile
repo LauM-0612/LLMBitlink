@@ -32,7 +32,7 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8800
 
 # Set environment variables
-ENV NAME World
+ENV NAME=World
 
 # Command to run the application using Gunicorn with an increased timeout
 CMD ["gunicorn", "--timeout", "120", "--bind", "0.0.0.0:8800", "chatbot.wsgi:application"]
