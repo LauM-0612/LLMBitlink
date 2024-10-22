@@ -1,12 +1,24 @@
-import openai
+import os
+import torch
+import requests
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import login
+from peft import PeftModel, PeftConfig
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import uvicorn
-from dotenv import load_dotenv
-import os
-import logging
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+from contextlib import asynccontextmanager
+
+# Reemplaza con tu token de Hugging Face
+HUGGING_FACE_TOKEN = "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"
+
+# URL de la API de Django (ajusta la IP y puerto según tu configuración)
+DJANGO_API_URL = "http://18.229.150.88:8800/get_all_data/"
+
 app = FastAPI()
+
+# Permitir orígenes específicos para evitar problemas de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Cambia "*" por los dominios específicos si prefieres
@@ -15,94 +27,112 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+class RequestBody(BaseModel):
+    prompt: str
 
-# Load environment variables
-load_dotenv()
+def authenticate():
+    # Iniciar sesión en Hugging Face
+    login(HUGGING_FACE_TOKEN)
 
-app = FastAPI()
+def load_model_and_tokenizer(model_name):
+    global model, tokenizer
+    print(f"Cargando el modelo {model_name}...")
 
-# Initialize OpenAI API
-openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    raise ValueError("OPENAI_API_KEY environment variable is not set")
+    # Cargar la configuración del modelo fine-tuned
+    peft_config = PeftConfig.from_pretrained(model_name)
 
-engine = 'gpt-3.5-turbo'
+    # Cargar el tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(peft_config.base_model_name_or_path)
 
-class ChatMessage(BaseModel):
-    user_input: str
+    # Cargar el modelo base
+    base_model = AutoModelForCausalLM.from_pretrained(
+        peft_config.base_model_name_or_path,
+        device_map="auto",
+        torch_dtype=torch.float16
+    )
 
-# Prompt template (unchanged)
-prompt_template = """
-# Rol
-Eres un experto en ventas inmobiliarias llamado Max. Eres conocido por comunicar con precisión y persuasión la información sobre propiedades y servicios inmobiliarios. Tu estilo es amigable y accesible, mientras que tu enfoque es proactivo y orientado a soluciones, utilizando técnicas avanzadas de ventas y cierre.
+    # Cargar el modelo fine-tuned
+    model = PeftModel.from_pretrained(base_model, model_name)
 
-# Objetivo
-Proporcionar servicios de consultoría y asistencia de ventas de alto nivel a clientes y colegas. Debes demostrar competencia en técnicas avanzadas de ventas, negociación y gestión de relaciones con clientes, ofreciendo siempre una experiencia acogedora, profesional y confiable.
-
-# Características de personalidad
-* Amigable y accesible: Interactúa de forma cálida, creando una experiencia agradable.
-* Profesional y confiable: Ofrece información precisa y actualizada.
-* Proactivo y orientado a soluciones: Anticipa necesidades, ofreciendo soluciones innovadoras.
-* Persuasivo pero respetuoso: Persuade usando datos y hechos, respetando siempre las preferencias del cliente.
-
-# Habilidades clave a modelar
-1. Comunicación efectiva: Simplifica la complejidad del mercado y describe las propiedades de forma clara.
-2. Técnicas avanzadas de venta y cierre: Adapta las estrategias según el contexto y necesidades del cliente, incluyendo manejo de objeciones.
-3. Análisis de datos del mercado inmobiliario: Analiza grandes volúmenes de datos para ofrecer recomendaciones detalladas sobre las tendencias del mercado.
-4. Gestión eficiente de CRM: Utiliza herramientas CRM para automatizar y optimizar la gestión de relaciones, mejorando la eficiencia y la experiencia del cliente.
-
-# Capacidades tecnológicas
-* Integración con herramientas de realidad virtual para tours de propiedades, proporcionando una experiencia inmersiva y detallada.
-* Uso de sistemas CRM avanzados para seguimiento y análisis de clientes, facilitando una gestión personalizada.
-* Implementación de marketing digital para atraer y retener clientes mediante estrategias orientadas a datos.
-
-# Ejemplos de interacción
-- **Consulta inicial:** "Basado en tus preferencias y las tendencias actuales del mercado, te recomiendo considerar propiedades en estas áreas específicas..."
-- **Negociación:** "Si estás interesado en hacer una oferta, puedo ayudarte a estructurarla de manera que sea atractiva para el vendedor y se ajuste a tu presupuesto. Además, puedo mostrarte cómo otros clientes han encontrado valor en propuestas similares."
-
-# Notas
-* Responde siempre en español latino.
-* Sé persuasivo, específico y detallado, usando técnicas de venta como la escasez para crear urgencia.
-* Responde únicamente a la consulta específica sin incluir información irrelevante.
-
-Question: {question}  Context: {context}
-"""
-
-def get_completion(user_input: str) -> str:
+def retrieve_data_from_django():
     try:
-        prompt = prompt_template.format(question=user_input, context="")
-        response = openai.ChatCompletion.create(
-            model=engine,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5
+        # Hacer una solicitud GET a la API Django para obtener los datos
+        response = requests.get(DJANGO_API_URL)
+        response.raise_for_status()  # Verifica si la respuesta fue exitosa
+        return response.json()
+    except requests.RequestException as e:
+        print(f"Error al obtener datos de la API Django: {e}")
+        return None
+
+def retrieve_relevant_knowledge(prompt, django_data):
+    # Buscar información relevante dentro de los datos obtenidos de la API Django
+    if django_data is None:
+        return "No se pudo obtener información de la API Django."
+
+    # Unir datos de las tres categorías (conversations, chunks, properties)
+    knowledge_base = django_data.get("conversations", []) + django_data.get("chunks", []) + django_data.get("properties", [])
+
+    # Ejemplo de lógica simple de recuperación (puedes mejorar esto)
+    for entry in knowledge_base:
+        if "input" in entry and entry["input"] in prompt:
+            return entry["output"]
+        elif "content" in entry and entry["content"] in prompt:
+            return entry["content"]
+        elif "description" in entry and entry["description"] in prompt:
+            return entry["description"]
+    
+    return "No se encontró información relevante."
+
+def generate_response(model, tokenizer, prompt, retrieved_info):
+    # Formatear el prompt con la información recuperada
+    formatted_prompt = f"### Human: {prompt}\n\n### Relevant Info: {retrieved_info}\n\n### Assistant:"
+
+    inputs = tokenizer(formatted_prompt, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model.generate(
+            inputs["input_ids"],
+            max_new_tokens=150,
+            do_sample=True,
+            top_p=0.95,
+            temperature=0.7,
+            pad_token_id=tokenizer.eos_token_id
         )
-        return response.choices[0].message["content"]
-    except openai.error.OpenAIError as e:
-        logger.error(f"OpenAI API error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error in OpenAI API call")
+    response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    return response.strip()
 
-@app.post("/chat/")
-async def chat_with_agent(chat_message: ChatMessage):
-    logger.debug(f"Received message: {chat_message.user_input}")
-    try:
-        result = get_completion(chat_message.user_input)
-        logger.debug(f"API response: {result}")
-        return {"response": result}
-    except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Código que se ejecuta al inicio (startup)
+    authenticate()
+    model_name = "pspedroelias96/LLMBitlink_Final"  # Usa el nombre de tu modelo fine-tuned
+    load_model_and_tokenizer(model_name)
+    print("¡Modelo cargado exitosamente!")
+    
+    yield  # Pausa para que la app siga corriendo
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the FastAPI OpenAI Integration!"}
+    # Código que se ejecuta al final (shutdown)
+    print("Apagando la aplicación...")
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/generate")
+async def generate_text(request_body: RequestBody):
+    if model is None or tokenizer is None:
+        raise HTTPException(status_code=500, detail="El modelo no está cargado")
+    
+    prompt = request_body.prompt
+
+    # Obtener datos de la API Django
+    django_data = retrieve_data_from_django()
+
+    # Recuperar información relevante para el prompt (RAG)
+    retrieved_info = retrieve_relevant_knowledge(prompt, django_data)
+    
+    # Generar respuesta con la información recuperada
+    response = generate_response(model, tokenizer, prompt, retrieved_info)
+    
+    return {"response": response}
 
 if __name__ == "__main__":
     port = int(os.getenv("FASTAPI_PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("ApiModel:app", host="0.0.0.0", port=port, reload=True)
